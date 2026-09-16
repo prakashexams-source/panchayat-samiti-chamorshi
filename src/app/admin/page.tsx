@@ -15,7 +15,6 @@ import {
   doc,
   updateDoc,
   onSnapshot,
-  orderBy,
   query,
   serverTimestamp,
 } from "firebase/firestore";
@@ -35,7 +34,16 @@ type DocumentItem = {
   category: string;
   date: string;
   url: string;
-  createdAt?: any;
+  createdAt: any;
+};
+
+type GalleryItem = {
+  id: string;
+  title: string;
+  category: string;
+  date: string;
+  url: string;
+  createdAt: any;
 };
 
 export default function Admin() {
@@ -48,14 +56,10 @@ export default function Admin() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
 
-  /* =====================================================
-     COMMON LOADING
-  ===================================================== */
-
   const [loading, setLoading] = useState(false);
 
   /* =====================================================
-     NOTICE STATES
+     NOTICE
   ===================================================== */
 
   const [notices, setNotices] = useState<Notice[]>([]);
@@ -64,19 +68,27 @@ export default function Admin() {
   const [date, setDate] = useState("");
   const [tag, setTag] = useState("महत्त्वपूर्ण");
 
-  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingId, setEditingId] =
+    useState<string | null>(null);
 
   /* =====================================================
-     DOCUMENT STATES
+     DOCUMENT
   ===================================================== */
 
-  const [documents, setDocuments] = useState<DocumentItem[]>([]);
+  const [documents, setDocuments] =
+    useState<DocumentItem[]>([]);
 
-  const [documentTitle, setDocumentTitle] = useState("");
+  const [documentTitle, setDocumentTitle] =
+    useState("");
+
   const [documentCategory, setDocumentCategory] =
     useState("सूचना");
-  const [documentDate, setDocumentDate] = useState("");
-  const [documentUrl, setDocumentUrl] = useState("");
+
+  const [documentDate, setDocumentDate] =
+    useState("");
+
+  const [documentUrl, setDocumentUrl] =
+    useState("");
 
   const [editingDocumentId, setEditingDocumentId] =
     useState<string | null>(null);
@@ -85,7 +97,32 @@ export default function Admin() {
     useState(false);
 
   /* =====================================================
-     FIREBASE LOGIN STATUS
+     GALLERY
+  ===================================================== */
+
+  const [gallery, setGallery] =
+    useState<GalleryItem[]>([]);
+
+  const [galleryTitle, setGalleryTitle] =
+    useState("");
+
+  const [galleryCategory, setGalleryCategory] =
+    useState("कार्यक्रम");
+
+  const [galleryDate, setGalleryDate] =
+    useState("");
+
+  const [galleryUrl, setGalleryUrl] =
+    useState("");
+
+  const [editingGalleryId, setEditingGalleryId] =
+    useState<string | null>(null);
+
+  const [galleryLoading, setGalleryLoading] =
+    useState(false);
+
+  /* =====================================================
+     AUTH STATE
   ===================================================== */
 
   useEffect(() => {
@@ -100,25 +137,29 @@ export default function Admin() {
   }, []);
 
   /* =====================================================
-     LOAD NOTICES FROM FIRESTORE
+     LOAD NOTICES
   ===================================================== */
 
   useEffect(() => {
     if (!user) return;
 
     const q = query(
-      collection(db, "notices"),
-      orderBy("date", "desc")
+      collection(db, "notices")
     );
 
     const unsubscribe = onSnapshot(
       q,
       (snapshot) => {
-        const data: Notice[] = snapshot.docs.map(
-          (item) => ({
+        const data: Notice[] =
+          snapshot.docs.map((item) => ({
             id: item.id,
             ...(item.data() as Omit<Notice, "id">),
-          })
+          }));
+
+        data.sort((a, b) =>
+          String(b.date || "").localeCompare(
+            String(a.date || "")
+          )
         );
 
         setNotices(data);
@@ -135,11 +176,7 @@ export default function Admin() {
   }, [user]);
 
   /* =====================================================
-     LOAD DOCUMENTS FROM FIRESTORE
-     
-     orderBy वापरलेले नाही.
-     त्यामुळे createdAt field नसलेले जुने documents
-     सुद्धा website वर दिसतील.
+     LOAD DOCUMENTS
   ===================================================== */
 
   useEffect(() => {
@@ -182,15 +219,12 @@ export default function Admin() {
             };
           });
 
-        /* नवीन document प्रथम */
         data.sort((a, b) => {
           const aTime =
-            a.createdAt?.toMillis?.() ||
-            0;
+            a.createdAt?.toMillis?.() || 0;
 
           const bTime =
-            b.createdAt?.toMillis?.() ||
-            0;
+            b.createdAt?.toMillis?.() || 0;
 
           return bTime - aTime;
         });
@@ -199,7 +233,74 @@ export default function Admin() {
       },
       (error) => {
         console.error(
-          "Documents loading error:",
+          "Document loading error:",
+          error
+        );
+      }
+    );
+
+    return () => unsubscribe();
+  }, [user]);
+
+  /* =====================================================
+     LOAD GALLERY
+  ===================================================== */
+
+  useEffect(() => {
+    if (!user) return;
+
+    const q = query(
+      collection(db, "gallery")
+    );
+
+    const unsubscribe = onSnapshot(
+      q,
+      (snapshot) => {
+        const data: GalleryItem[] =
+          snapshot.docs.map((item) => {
+            const d = item.data();
+
+            return {
+              id: item.id,
+
+              title:
+                d.title ||
+                d.Title ||
+                "",
+
+              category:
+                d.category ||
+                d.Category ||
+                "कार्यक्रम",
+
+              date:
+                d.date ||
+                "",
+
+              url:
+                d.url ||
+                "",
+
+              createdAt:
+                d.createdAt,
+            };
+          });
+
+        data.sort((a, b) => {
+          const aTime =
+            a.createdAt?.toMillis?.() || 0;
+
+          const bTime =
+            b.createdAt?.toMillis?.() || 0;
+
+          return bTime - aTime;
+        });
+
+        setGallery(data);
+      },
+      (error) => {
+        console.error(
+          "Gallery loading error:",
           error
         );
       }
@@ -229,15 +330,19 @@ export default function Admin() {
         email.trim(),
         password
       );
-        } catch (error: any) {
-      console.error("FIREBASE LOGIN ERROR:", error);
+    } catch (error: any) {
+      console.error(
+        "FIREBASE LOGIN ERROR:",
+        error
+      );
 
       alert(
         "Login Error\n\n" +
         "Code: " +
         (error?.code || "unknown") +
         "\n\nMessage: " +
-        (error?.message || "Unknown Firebase error")
+        (error?.message ||
+          "Unknown Firebase error")
       );
     } finally {
       setLoading(false);
@@ -245,14 +350,12 @@ export default function Admin() {
   };
 
   /* =====================================================
-     NOTICE - SAVE / UPDATE
+     NOTICE SAVE
   ===================================================== */
 
   const saveNotice = async () => {
     if (!title.trim()) {
-      alert(
-        "Notice title भरा."
-      );
+      alert("Notice title भरा.");
 
       return;
     }
@@ -260,23 +363,18 @@ export default function Admin() {
     try {
       setLoading(true);
 
-      /* UPDATE */
+      const finalDate =
+        date ||
+        new Date()
+          .toISOString()
+          .split("T")[0];
+
       if (editingId) {
         await updateDoc(
-          doc(
-            db,
-            "notices",
-            editingId
-          ),
+          doc(db, "notices", editingId),
           {
             title: title.trim(),
-
-            date:
-              date ||
-              new Date()
-                .toISOString()
-                .split("T")[0],
-
+            date: finalDate,
             tag: tag,
           }
         );
@@ -284,28 +382,15 @@ export default function Admin() {
         alert(
           "Notice यशस्वीपणे Update झाली ✅"
         );
-      }
-
-      /* ADD */
-      else {
+      } else {
         await addDoc(
-          collection(
-            db,
-            "notices"
-          ),
+          collection(db, "notices"),
           {
             title: title.trim(),
-
-            date:
-              date ||
-              new Date()
-                .toISOString()
-                .split("T")[0],
-
+            date: finalDate,
             tag: tag,
-
             createdAt:
-              new Date().toISOString(),
+              serverTimestamp(),
           }
         );
 
@@ -327,18 +412,15 @@ export default function Admin() {
   };
 
   /* =====================================================
-     NOTICE - EDIT
+     NOTICE EDIT
   ===================================================== */
 
   const editNotice = (
     notice: Notice
   ) => {
     setEditingId(notice.id);
-
     setTitle(notice.title);
-
     setDate(notice.date);
-
     setTag(notice.tag);
 
     window.scrollTo({
@@ -348,23 +430,18 @@ export default function Admin() {
   };
 
   /* =====================================================
-     NOTICE - CLEAR FORM
+     NOTICE CLEAR
   ===================================================== */
 
   const clearForm = () => {
     setEditingId(null);
-
     setTitle("");
-
     setDate("");
-
-    setTag(
-      "महत्त्वपूर्ण"
-    );
+    setTag("महत्त्वपूर्ण");
   };
 
   /* =====================================================
-     NOTICE - DELETE
+     NOTICE DELETE
   ===================================================== */
 
   const removeNotice = async (
@@ -379,11 +456,7 @@ export default function Admin() {
 
     try {
       await deleteDoc(
-        doc(
-          db,
-          "notices",
-          id
-        )
+        doc(db, "notices", id)
       );
 
       if (editingId === id) {
@@ -403,32 +476,12 @@ export default function Admin() {
   };
 
   /* =====================================================
-     DOCUMENT - CLEAR FORM
-  ===================================================== */
-
-  const clearDocumentForm = () => {
-    setEditingDocumentId(null);
-
-    setDocumentTitle("");
-
-    setDocumentCategory(
-      "सूचना"
-    );
-
-    setDocumentDate("");
-
-    setDocumentUrl("");
-  };
-
-  /* =====================================================
-     DOCUMENT - SAVE / UPDATE
+     DOCUMENT SAVE
   ===================================================== */
 
   const saveDocument = async () => {
     if (!documentTitle.trim()) {
-      alert(
-        "Document Title भरा."
-      );
+      alert("Document Title भरा.");
 
       return;
     }
@@ -450,7 +503,6 @@ export default function Admin() {
           .toISOString()
           .split("T")[0];
 
-      /* UPDATE */
       if (editingDocumentId) {
         await updateDoc(
           doc(
@@ -476,15 +528,9 @@ export default function Admin() {
         alert(
           "Document यशस्वीपणे Update झाले ✅"
         );
-      }
-
-      /* ADD */
-      else {
+      } else {
         await addDoc(
-          collection(
-            db,
-            "documents"
-          ),
+          collection(db, "documents"),
           {
             title:
               documentTitle.trim(),
@@ -510,10 +556,7 @@ export default function Admin() {
 
       clearDocumentForm();
     } catch (error: any) {
-      console.error(
-        "Document Save Error:",
-        error
-      );
+      console.error(error);
 
       alert(
         "Document Save/Update झाले नाही. Firestore Rules तपासा."
@@ -524,15 +567,13 @@ export default function Admin() {
   };
 
   /* =====================================================
-     DOCUMENT - EDIT
+     DOCUMENT EDIT
   ===================================================== */
 
   const editDocument = (
     item: DocumentItem
   ) => {
-    setEditingDocumentId(
-      item.id
-    );
+    setEditingDocumentId(item.id);
 
     setDocumentTitle(
       item.title
@@ -551,13 +592,31 @@ export default function Admin() {
     );
 
     window.scrollTo({
-      top: 850,
+      top: 900,
       behavior: "smooth",
     });
   };
 
   /* =====================================================
-     DOCUMENT - DELETE
+     DOCUMENT CLEAR
+  ===================================================== */
+
+  const clearDocumentForm = () => {
+    setEditingDocumentId(null);
+
+    setDocumentTitle("");
+
+    setDocumentCategory(
+      "सूचना"
+    );
+
+    setDocumentDate("");
+
+    setDocumentUrl("");
+  };
+
+  /* =====================================================
+     DOCUMENT DELETE
   ===================================================== */
 
   const removeDocument = async (
@@ -565,18 +624,14 @@ export default function Admin() {
   ) => {
     const confirmDelete =
       confirm(
-        "हे Document delete करायचे आहे का?"
+        "हा Document delete करायचा आहे का?"
       );
 
     if (!confirmDelete) return;
 
     try {
       await deleteDoc(
-        doc(
-          db,
-          "documents",
-          id
-        )
+        doc(db, "documents", id)
       );
 
       if (
@@ -592,7 +647,188 @@ export default function Admin() {
       console.error(error);
 
       alert(
-        "Document Delete करताना error आला."
+        "Document delete करताना error आला."
+      );
+    }
+  };
+
+  /* =====================================================
+     GALLERY SAVE
+  ===================================================== */
+
+  const saveGallery = async () => {
+    if (!galleryTitle.trim()) {
+      alert(
+        "Photo Title भरा."
+      );
+
+      return;
+    }
+
+    if (!galleryUrl.trim()) {
+      alert(
+        "Google Drive Photo Link भरा."
+      );
+
+      return;
+    }
+
+    try {
+      setGalleryLoading(true);
+
+      const finalDate =
+        galleryDate ||
+        new Date()
+          .toISOString()
+          .split("T")[0];
+
+      if (editingGalleryId) {
+        await updateDoc(
+          doc(
+            db,
+            "gallery",
+            editingGalleryId
+          ),
+          {
+            title:
+              galleryTitle.trim(),
+
+            category:
+              galleryCategory,
+
+            date:
+              finalDate,
+
+            url:
+              galleryUrl.trim(),
+          }
+        );
+
+        alert(
+          "Gallery Photo यशस्वीपणे Update झाला ✅"
+        );
+      } else {
+        await addDoc(
+          collection(db, "gallery"),
+          {
+            title:
+              galleryTitle.trim(),
+
+            category:
+              galleryCategory,
+
+            date:
+              finalDate,
+
+            url:
+              galleryUrl.trim(),
+
+            createdAt:
+              serverTimestamp(),
+          }
+        );
+
+        alert(
+          "Gallery Photo यशस्वीपणे Save झाला ✅"
+        );
+      }
+
+      clearGalleryForm();
+    } catch (error: any) {
+      console.error(error);
+
+      alert(
+        "Gallery Photo Save/Update झाला नाही. Firestore Rules तपासा."
+      );
+    } finally {
+      setGalleryLoading(false);
+    }
+  };
+
+  /* =====================================================
+     GALLERY EDIT
+  ===================================================== */
+
+  const editGallery = (
+    item: GalleryItem
+  ) => {
+    setEditingGalleryId(
+      item.id
+    );
+
+    setGalleryTitle(
+      item.title
+    );
+
+    setGalleryCategory(
+      item.category
+    );
+
+    setGalleryDate(
+      item.date
+    );
+
+    setGalleryUrl(
+      item.url
+    );
+
+    window.scrollTo({
+      top: 1400,
+      behavior: "smooth",
+    });
+  };
+
+  /* =====================================================
+     GALLERY CLEAR
+  ===================================================== */
+
+  const clearGalleryForm = () => {
+    setEditingGalleryId(null);
+
+    setGalleryTitle("");
+
+    setGalleryCategory(
+      "कार्यक्रम"
+    );
+
+    setGalleryDate("");
+
+    setGalleryUrl("");
+  };
+
+  /* =====================================================
+     GALLERY DELETE
+  ===================================================== */
+
+  const removeGallery = async (
+    id: string
+  ) => {
+    const confirmDelete =
+      confirm(
+        "हा Photo Gallery मधून delete करायचा आहे का?"
+      );
+
+    if (!confirmDelete) return;
+
+    try {
+      await deleteDoc(
+        doc(db, "gallery", id)
+      );
+
+      if (
+        editingGalleryId === id
+      ) {
+        clearGalleryForm();
+      }
+
+      alert(
+        "Gallery Photo delete झाला ✅"
+      );
+    } catch (error) {
+      console.error(error);
+
+      alert(
+        "Gallery Photo delete करताना error आला."
       );
     }
   };
@@ -624,8 +860,9 @@ export default function Admin() {
           </h1>
 
           <p>
-            पंचायत समिती चामोर्शी वेबसाइट
-            व्यवस्थापनासाठी Login करा.
+            पंचायत समिती चामोर्शी
+            वेबसाइट व्यवस्थापनासाठी
+            Login करा.
           </p>
 
           <input
@@ -649,10 +886,7 @@ export default function Admin() {
               )
             }
             onKeyDown={(e) => {
-              if (
-                e.key ===
-                "Enter"
-              ) {
+              if (e.key === "Enter") {
                 login();
               }
             }}
@@ -683,9 +917,7 @@ export default function Admin() {
 
       <div className="container">
 
-        {/* =================================================
-            HEADER
-        ================================================= */}
+        {/* HEADER */}
 
         <div className="admin-head">
 
@@ -700,8 +932,7 @@ export default function Admin() {
             </h1>
 
             <p>
-              Logged in:{" "}
-              {user.email}
+              Logged in: {user.email}
             </p>
 
           </div>
@@ -715,14 +946,18 @@ export default function Admin() {
 
         </div>
 
-        {/* =================================================
-            DASHBOARD CARDS
-        ================================================= */}
+        {/* DASHBOARD CARDS */}
 
         <div className="admin-cards">
 
           <div>
-            📢
+            <span
+              style={{
+                fontSize: "28px",
+              }}
+            >
+              📢
+            </span>
 
             <b>
               {notices.length}
@@ -734,7 +969,13 @@ export default function Admin() {
           </div>
 
           <div>
-            📄
+            <span
+              style={{
+                fontSize: "28px",
+              }}
+            >
+              📄
+            </span>
 
             <b>
               {documents.length}
@@ -746,10 +987,16 @@ export default function Admin() {
           </div>
 
           <div>
-            📷
+            <span
+              style={{
+                fontSize: "28px",
+              }}
+            >
+              📷
+            </span>
 
             <b>
-              0
+              {gallery.length}
             </b>
 
             <span>
@@ -758,7 +1005,13 @@ export default function Admin() {
           </div>
 
           <div>
-            📰
+            <span
+              style={{
+                fontSize: "28px",
+              }}
+            >
+              📰
+            </span>
 
             <b>
               0
@@ -828,19 +1081,13 @@ export default function Admin() {
               <option>
                 निविदा
               </option>
-
-              <option>
-                आदेश
-              </option>
-
-              <option>
-                इतर
-              </option>
             </select>
 
             <button
               className="primary-btn"
-              onClick={saveNotice}
+              onClick={
+                saveNotice
+              }
               disabled={loading}
             >
               {loading
@@ -864,30 +1111,21 @@ export default function Admin() {
 
           </div>
 
-          {/* NOTICE LIST */}
-
           <div className="list-card">
 
-            {notices.length ===
-            0 ? (
-
+            {notices.length === 0 ? (
               <p>
-                सध्या कोणतीही
-                सूचना उपलब्ध नाही.
+                सध्या कोणतीही सूचना उपलब्ध नाही.
               </p>
-
             ) : (
-
               notices.map(
                 (n) => (
-
                   <div
                     className="list-item"
                     key={n.id}
                   >
 
                     <div>
-
                       <b>
                         {n.title}
                       </b>
@@ -896,15 +1134,13 @@ export default function Admin() {
                         {n.date} •{" "}
                         {n.tag}
                       </small>
-
                     </div>
 
                     <div
                       style={{
                         display:
                           "flex",
-                        gap:
-                          "8px",
+                        gap: "8px",
                         alignItems:
                           "center",
                         flexWrap:
@@ -937,10 +1173,8 @@ export default function Admin() {
                     </div>
 
                   </div>
-
                 )
               )
-
             )}
 
           </div>
@@ -951,112 +1185,15 @@ export default function Admin() {
             DOCUMENT MANAGEMENT
         ================================================= */}
 
-        <div
-          className="content-box"
-          style={{
-            marginTop:
-              "25px",
-          }}
-        >
+        <div className="content-box">
 
-          <div
-            style={{
-              display:
-                "flex",
-              justifyContent:
-                "space-between",
-              alignItems:
-                "center",
-              gap:
-                "15px",
-              marginBottom:
-                "20px",
-              flexWrap:
-                "wrap",
-            }}
-          >
+          <h2>
+            {editingDocumentId
+              ? "कागदपत्र संपादित करा"
+              : "नवीन कागदपत्र प्रकाशित करा"}
+          </h2>
 
-            <div>
-
-              <span className="section-kicker">
-                DOCUMENT MANAGEMENT
-              </span>
-
-              <h2
-                style={{
-                  marginTop:
-                    "8px",
-                }}
-              >
-                📄 कागदपत्र व्यवस्थापन
-              </h2>
-
-              <p
-                style={{
-                  color:
-                    "#64748b",
-                  marginTop:
-                    "5px",
-                }}
-              >
-                Google Drive वर
-                अपलोड केलेल्या PDF
-                कागदपत्रांची Website
-                वर नोंद करा.
-              </p>
-
-            </div>
-
-            <div
-              style={{
-                minWidth:
-                  "110px",
-                padding:
-                  "12px 18px",
-                textAlign:
-                  "center",
-                border:
-                  "1px solid #dbeafe",
-                borderRadius:
-                  "12px",
-                background:
-                  "#eff6ff",
-              }}
-            >
-
-              <small
-                style={{
-                  display:
-                    "block",
-                  color:
-                    "#64748b",
-                }}
-              >
-                Documents
-              </small>
-
-              <strong
-                style={{
-                  fontSize:
-                    "28px",
-                }}
-              >
-                {documents.length}
-              </strong>
-
-            </div>
-
-          </div>
-
-          {/* DOCUMENT FORM */}
-
-          <div
-            className="form-grid"
-            style={{
-              marginBottom:
-                "20px",
-            }}
-          >
+          <div className="form-grid">
 
             <input
               placeholder="Document Title"
@@ -1080,13 +1217,8 @@ export default function Admin() {
                 )
               }
             >
-
               <option>
                 सूचना
-              </option>
-
-              <option>
-                शासन निर्णय
               </option>
 
               <option>
@@ -1094,11 +1226,7 @@ export default function Admin() {
               </option>
 
               <option>
-                आदेश
-              </option>
-
-              <option>
-                अहवाल
+                शासन निर्णय
               </option>
 
               <option>
@@ -1106,13 +1234,16 @@ export default function Admin() {
               </option>
 
               <option>
-                बैठक
+                अहवाल
+              </option>
+
+              <option>
+                अर्ज
               </option>
 
               <option>
                 इतर
               </option>
-
             </select>
 
             <input
@@ -1128,7 +1259,6 @@ export default function Admin() {
             />
 
             <input
-              type="url"
               placeholder="Google Drive PDF Link"
               value={
                 documentUrl
@@ -1172,88 +1302,31 @@ export default function Admin() {
 
           </div>
 
-          <p
-            style={{
-              fontSize:
-                "12px",
-              color:
-                "#64748b",
-              marginBottom:
-                "15px",
-            }}
-          >
-            ℹ️ Google Drive मध्ये
-            PDF ची Sharing
-            <b>
-              {" "}
-              Anyone with the
-              link → Viewer
-            </b>{" "}
-            अशी असणे आवश्यक आहे.
-          </p>
-
-          {/* DOCUMENT LIST */}
-
           <div className="list-card">
 
-            {documents.length ===
-            0 ? (
-
+            {documents.length === 0 ? (
               <p>
-                सध्या कोणतेही
-                Document उपलब्ध
-                नाही.
+                सध्या कोणतेही कागदपत्र उपलब्ध नाही.
               </p>
-
             ) : (
-
               documents.map(
                 (item) => (
-
                   <div
                     className="list-item"
                     key={item.id}
                   >
 
-                    <div
-                      style={{
-                        minWidth:
-                          "0",
-                        flex:
-                          "1",
-                      }}
-                    >
+                    <div>
 
                       <b>
-                        📄{" "}
                         {item.title}
                       </b>
 
                       <small>
-                        {item.date} •{" "}
-                        {item.category}
+                        {item.category}{" "}
+                        •{" "}
+                        {item.date}
                       </small>
-
-                      {item.url && (
-                        <small
-                          style={{
-                            display:
-                              "block",
-                            marginTop:
-                              "4px",
-                            maxWidth:
-                              "650px",
-                            overflow:
-                              "hidden",
-                            textOverflow:
-                              "ellipsis",
-                            whiteSpace:
-                              "nowrap",
-                          }}
-                        >
-                          {item.url}
-                        </small>
-                      )}
 
                     </div>
 
@@ -1261,8 +1334,7 @@ export default function Admin() {
                       style={{
                         display:
                           "flex",
-                        gap:
-                          "8px",
+                        gap: "8px",
                         alignItems:
                           "center",
                         flexWrap:
@@ -1283,7 +1355,7 @@ export default function Admin() {
                               "none",
                           }}
                         >
-                          👁️ View PDF
+                          📄 View PDF
                         </a>
                       )}
 
@@ -1312,10 +1384,262 @@ export default function Admin() {
                     </div>
 
                   </div>
-
                 )
               )
+            )}
 
+          </div>
+
+        </div>
+
+        {/* =================================================
+            GALLERY MANAGEMENT
+        ================================================= */}
+
+        <div className="content-box">
+
+          <h2>
+            {editingGalleryId
+              ? "Gallery Photo संपादित करा"
+              : "नवीन Gallery Photo प्रकाशित करा"}
+          </h2>
+
+          <div className="form-grid">
+
+            <input
+              placeholder="Photo Title"
+              value={
+                galleryTitle
+              }
+              onChange={(e) =>
+                setGalleryTitle(
+                  e.target.value
+                )
+              }
+            />
+
+            <select
+              value={
+                galleryCategory
+              }
+              onChange={(e) =>
+                setGalleryCategory(
+                  e.target.value
+                )
+              }
+            >
+              <option>
+                कार्यक्रम
+              </option>
+
+              <option>
+                बैठक
+              </option>
+
+              <option>
+                शिबिर
+              </option>
+
+              <option>
+                विकासकामे
+              </option>
+
+              <option>
+                पुरस्कार
+              </option>
+
+              <option>
+                इतर
+              </option>
+            </select>
+
+            <input
+              type="date"
+              value={
+                galleryDate
+              }
+              onChange={(e) =>
+                setGalleryDate(
+                  e.target.value
+                )
+              }
+            />
+
+            <input
+              placeholder="Google Drive Photo Link"
+              value={
+                galleryUrl
+              }
+              onChange={(e) =>
+                setGalleryUrl(
+                  e.target.value
+                )
+              }
+            />
+
+            <button
+              className="primary-btn"
+              onClick={
+                saveGallery
+              }
+              disabled={
+                galleryLoading
+              }
+            >
+              {galleryLoading
+                ? "Saving..."
+                : editingGalleryId
+                ? "Update Photo"
+                : "Photo Save करा"}
+            </button>
+
+            {editingGalleryId && (
+              <button
+                className="outline-btn"
+                onClick={
+                  clearGalleryForm
+                }
+                disabled={
+                  galleryLoading
+                }
+              >
+                Cancel
+              </button>
+            )}
+
+          </div>
+
+          <div className="list-card">
+
+            {gallery.length === 0 ? (
+              <p>
+                सध्या Gallery मध्ये कोणतेही Photo उपलब्ध नाही.
+              </p>
+            ) : (
+              gallery.map(
+                (item) => (
+                  <div
+                    className="list-item"
+                    key={item.id}
+                  >
+
+                    <div
+                      style={{
+                        display:
+                          "flex",
+                        gap: "14px",
+                        alignItems:
+                          "center",
+                      }}
+                    >
+
+                      {item.url && (
+                        <img
+                          src={
+                            item.url
+                          }
+                          alt={
+                            item.title
+                          }
+                          style={{
+                            width:
+                              "80px",
+                            height:
+                              "60px",
+                            objectFit:
+                              "cover",
+                            borderRadius:
+                              "8px",
+                            border:
+                              "1px solid #ddd",
+                          }}
+                          onError={(
+                            e
+                          ) => {
+                            (
+                              e.currentTarget
+                            ).style.display =
+                              "none";
+                          }}
+                        />
+                      )}
+
+                      <div>
+
+                        <b>
+                          {item.title}
+                        </b>
+
+                        <small>
+                          {
+                            item.category
+                          }{" "}
+                          •{" "}
+                          {
+                            item.date
+                          }
+                        </small>
+
+                      </div>
+
+                    </div>
+
+                    <div
+                      style={{
+                        display:
+                          "flex",
+                        gap: "8px",
+                        alignItems:
+                          "center",
+                        flexWrap:
+                          "wrap",
+                      }}
+                    >
+
+                      {item.url && (
+                        <a
+                          href={
+                            item.url
+                          }
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="outline-btn"
+                          style={{
+                            textDecoration:
+                              "none",
+                          }}
+                        >
+                          👁️ View
+                        </a>
+                      )}
+
+                      <button
+                        className="outline-btn"
+                        onClick={() =>
+                          editGallery(
+                            item
+                          )
+                        }
+                      >
+                        ✏️ Edit
+                      </button>
+
+                      <button
+                        className="delete-btn"
+                        onClick={() =>
+                          removeGallery(
+                            item.id
+                          )
+                        }
+                      >
+                        🗑️ Delete
+                      </button>
+
+                    </div>
+
+                  </div>
+                )
+              )
             )}
 
           </div>
