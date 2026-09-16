@@ -1,0 +1,1 @@
+export default function Documents(){return <main className="section"><div className="container"><span className="section-kicker">DOCUMENTS & REPORTS</span><h1>अहवाल व कागदपत्रे</h1><div className="content-box"><p>Firebase Storage जोडल्यावर येथे GR, परिपत्रके, आदेश, निविदा आणि अहवाल PDF स्वरूपात Admin Panel मधून प्रकाशित करता येतील.</p></div></div></main>}
