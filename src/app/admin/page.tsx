@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+
 import {
   signInWithEmailAndPassword,
   onAuthStateChanged,
@@ -10,12 +11,12 @@ import {
 import {
   collection,
   addDoc,
-  updateDoc,
   deleteDoc,
   doc,
+  updateDoc,
   onSnapshot,
-  query,
   orderBy,
+  query,
   serverTimestamp,
 } from "firebase/firestore";
 
@@ -28,12 +29,34 @@ type Notice = {
   tag: string;
 };
 
+type DocumentItem = {
+  id: string;
+  title: string;
+  category: string;
+  date: string;
+  url: string;
+  createdAt?: any;
+};
+
 export default function Admin() {
-  const [logged, setLogged] = useState(false);
-  const [checkingAuth, setCheckingAuth] = useState(true);
+  /* =====================================================
+     AUTH
+  ===================================================== */
+
+  const [user, setUser] = useState<any>(null);
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+
+  /* =====================================================
+     COMMON LOADING
+  ===================================================== */
+
+  const [loading, setLoading] = useState(false);
+
+  /* =====================================================
+     NOTICE STATES
+  ===================================================== */
 
   const [notices, setNotices] = useState<Notice[]>([]);
 
@@ -42,62 +65,159 @@ export default function Admin() {
   const [tag, setTag] = useState("महत्त्वपूर्ण");
 
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
 
-  // ------------------------------------
-  // Firebase Authentication
-  // ------------------------------------
+  /* =====================================================
+     DOCUMENT STATES
+  ===================================================== */
+
+  const [documents, setDocuments] = useState<DocumentItem[]>([]);
+
+  const [documentTitle, setDocumentTitle] = useState("");
+  const [documentCategory, setDocumentCategory] =
+    useState("सूचना");
+  const [documentDate, setDocumentDate] = useState("");
+  const [documentUrl, setDocumentUrl] = useState("");
+
+  const [editingDocumentId, setEditingDocumentId] =
+    useState<string | null>(null);
+
+  const [documentLoading, setDocumentLoading] =
+    useState(false);
+
+  /* =====================================================
+     FIREBASE LOGIN STATUS
+  ===================================================== */
+
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      setLogged(!!user);
-      setCheckingAuth(false);
-    });
+    const unsubscribe = onAuthStateChanged(
+      auth,
+      (currentUser) => {
+        setUser(currentUser);
+      }
+    );
 
     return () => unsubscribe();
   }, []);
 
-  // ------------------------------------
-  // Firestore Notices
-  // ------------------------------------
+  /* =====================================================
+     LOAD NOTICES FROM FIRESTORE
+  ===================================================== */
+
   useEffect(() => {
-    if (!logged) return;
+    if (!user) return;
 
     const q = query(
       collection(db, "notices"),
-      orderBy("createdAt", "desc")
+      orderBy("date", "desc")
     );
 
     const unsubscribe = onSnapshot(
       q,
       (snapshot) => {
-        const data: Notice[] = snapshot.docs.map((item) => {
-          const d = item.data();
-
-          return {
+        const data: Notice[] = snapshot.docs.map(
+          (item) => ({
             id: item.id,
-            title: d.title || "",
-            date: d.date || "",
-            tag: d.tag || "महत्त्वपूर्ण",
-          };
-        });
+            ...(item.data() as Omit<Notice, "id">),
+          })
+        );
 
         setNotices(data);
       },
       (error) => {
-        console.error(error);
-        alert("Notices load करताना समस्या आली.");
+        console.error(
+          "Notice loading error:",
+          error
+        );
       }
     );
 
     return () => unsubscribe();
-  }, [logged]);
+  }, [user]);
 
-  // ------------------------------------
-  // Login
-  // ------------------------------------
+  /* =====================================================
+     LOAD DOCUMENTS FROM FIRESTORE
+     
+     orderBy वापरलेले नाही.
+     त्यामुळे createdAt field नसलेले जुने documents
+     सुद्धा website वर दिसतील.
+  ===================================================== */
+
+  useEffect(() => {
+    if (!user) return;
+
+    const q = query(
+      collection(db, "documents")
+    );
+
+    const unsubscribe = onSnapshot(
+      q,
+      (snapshot) => {
+        const data: DocumentItem[] =
+          snapshot.docs.map((item) => {
+            const d = item.data();
+
+            return {
+              id: item.id,
+
+              title:
+                d.title ||
+                d.Title ||
+                "",
+
+              category:
+                d.category ||
+                d.Category ||
+                "इतर",
+
+              date:
+                d.date ||
+                "",
+
+              url:
+                d.url ||
+                "",
+
+              createdAt:
+                d.createdAt,
+            };
+          });
+
+        /* नवीन document प्रथम */
+        data.sort((a, b) => {
+          const aTime =
+            a.createdAt?.toMillis?.() ||
+            0;
+
+          const bTime =
+            b.createdAt?.toMillis?.() ||
+            0;
+
+          return bTime - aTime;
+        });
+
+        setDocuments(data);
+      },
+      (error) => {
+        console.error(
+          "Documents loading error:",
+          error
+        );
+      }
+    );
+
+    return () => unsubscribe();
+  }, [user]);
+
+  /* =====================================================
+     LOGIN
+  ===================================================== */
+
   const login = async () => {
     if (!email.trim() || !password) {
-      alert("कृपया Email आणि Password भरा.");
+      alert(
+        "Email आणि Password भरा."
+      );
+
       return;
     }
 
@@ -109,160 +229,415 @@ export default function Admin() {
         email.trim(),
         password
       );
-
-      setEmail("");
-      setPassword("");
     } catch (error: any) {
       console.error(error);
 
       if (
-        error?.code === "auth/invalid-credential" ||
-        error?.code === "auth/wrong-password" ||
-        error?.code === "auth/user-not-found"
+        error.code ===
+        "auth/invalid-credential"
       ) {
-        alert("Email किंवा Password चुकीचा आहे.");
+        alert(
+          "Email किंवा Password चुकीचा आहे."
+        );
+      } else if (
+        error.code ===
+        "auth/too-many-requests"
+      ) {
+        alert(
+          "खूप प्रयत्न झाले आहेत. थोड्या वेळाने पुन्हा प्रयत्न करा."
+        );
       } else {
-        alert("Login करताना समस्या आली.");
+        alert(
+          "Login failed. Firebase Authentication तपासा."
+        );
       }
     } finally {
       setLoading(false);
     }
   };
 
-  // ------------------------------------
-  // Logout
-  // ------------------------------------
-  const logout = async () => {
-    await signOut(auth);
-  };
+  /* =====================================================
+     NOTICE - SAVE / UPDATE
+  ===================================================== */
 
-  // ------------------------------------
-  // Add / Update Notice
-  // ------------------------------------
   const saveNotice = async () => {
     if (!title.trim()) {
-      alert("Notice title भरा.");
+      alert(
+        "Notice title भरा."
+      );
+
       return;
     }
 
     try {
       setLoading(true);
 
-      // EDIT MODE
+      /* UPDATE */
       if (editingId) {
-        await updateDoc(doc(db, "notices", editingId), {
-          title: title.trim(),
-          date: date || new Date().toLocaleDateString("en-IN"),
-          tag,
-          updatedAt: serverTimestamp(),
-        });
+        await updateDoc(
+          doc(
+            db,
+            "notices",
+            editingId
+          ),
+          {
+            title: title.trim(),
 
-        alert("Notice successfully updated.");
+            date:
+              date ||
+              new Date()
+                .toISOString()
+                .split("T")[0],
 
-        setEditingId(null);
+            tag: tag,
+          }
+        );
+
+        alert(
+          "Notice यशस्वीपणे Update झाली ✅"
+        );
       }
 
-      // ADD MODE
+      /* ADD */
       else {
-        await addDoc(collection(db, "notices"), {
-          title: title.trim(),
-          date:
-            date ||
-            new Date().toLocaleDateString("en-IN"),
-          tag,
-          createdAt: serverTimestamp(),
-        });
+        await addDoc(
+          collection(
+            db,
+            "notices"
+          ),
+          {
+            title: title.trim(),
 
-        alert("Notice successfully added.");
+            date:
+              date ||
+              new Date()
+                .toISOString()
+                .split("T")[0],
+
+            tag: tag,
+
+            createdAt:
+              new Date().toISOString(),
+          }
+        );
+
+        alert(
+          "Notice यशस्वीपणे Save झाली ✅"
+        );
       }
 
       clearForm();
-    } catch (error) {
+    } catch (error: any) {
       console.error(error);
-      alert("Notice save करताना समस्या आली.");
+
+      alert(
+        "Notice Save/Update झाली नाही. Firestore Rules तपासा."
+      );
     } finally {
       setLoading(false);
     }
   };
 
-  // ------------------------------------
-  // Edit Notice
-  // ------------------------------------
-  const editNotice = (notice: Notice) => {
+  /* =====================================================
+     NOTICE - EDIT
+  ===================================================== */
+
+  const editNotice = (
+    notice: Notice
+  ) => {
     setEditingId(notice.id);
+
     setTitle(notice.title);
+
     setDate(notice.date);
+
     setTag(notice.tag);
 
     window.scrollTo({
-      top: 300,
+      top: 350,
       behavior: "smooth",
     });
   };
 
-  // ------------------------------------
-  // Delete Notice
-  // ------------------------------------
-  const remove = async (id: string) => {
-    const confirmDelete = window.confirm(
-      "ही Notice delete करायची आहे का?"
+  /* =====================================================
+     NOTICE - CLEAR FORM
+  ===================================================== */
+
+  const clearForm = () => {
+    setEditingId(null);
+
+    setTitle("");
+
+    setDate("");
+
+    setTag(
+      "महत्त्वपूर्ण"
     );
+  };
+
+  /* =====================================================
+     NOTICE - DELETE
+  ===================================================== */
+
+  const removeNotice = async (
+    id: string
+  ) => {
+    const confirmDelete =
+      confirm(
+        "ही Notice delete करायची आहे का?"
+      );
 
     if (!confirmDelete) return;
 
     try {
-      await deleteDoc(doc(db, "notices", id));
+      await deleteDoc(
+        doc(
+          db,
+          "notices",
+          id
+        )
+      );
 
-      alert("Notice deleted successfully.");
+      if (editingId === id) {
+        clearForm();
+      }
+
+      alert(
+        "Notice delete झाली ✅"
+      );
     } catch (error) {
       console.error(error);
-      alert("Notice delete करताना समस्या आली.");
+
+      alert(
+        "Delete करताना error आला."
+      );
     }
   };
 
-  // ------------------------------------
-  // Clear Form
-  // ------------------------------------
-  const clearForm = () => {
-    setTitle("");
-    setDate("");
-    setTag("महत्त्वपूर्ण");
-    setEditingId(null);
+  /* =====================================================
+     DOCUMENT - CLEAR FORM
+  ===================================================== */
+
+  const clearDocumentForm = () => {
+    setEditingDocumentId(null);
+
+    setDocumentTitle("");
+
+    setDocumentCategory(
+      "सूचना"
+    );
+
+    setDocumentDate("");
+
+    setDocumentUrl("");
   };
 
-  // ------------------------------------
-  // Loading
-  // ------------------------------------
-  if (checkingAuth) {
-    return (
-      <main className="section">
-        <div className="container admin-login">
-          <span className="section-kicker">
-            ADMIN PANEL
-          </span>
+  /* =====================================================
+     DOCUMENT - SAVE / UPDATE
+  ===================================================== */
 
-          <h1>Loading...</h1>
-        </div>
-      </main>
+  const saveDocument = async () => {
+    if (!documentTitle.trim()) {
+      alert(
+        "Document Title भरा."
+      );
+
+      return;
+    }
+
+    if (!documentUrl.trim()) {
+      alert(
+        "Google Drive PDF Link भरा."
+      );
+
+      return;
+    }
+
+    try {
+      setDocumentLoading(true);
+
+      const finalDate =
+        documentDate ||
+        new Date()
+          .toISOString()
+          .split("T")[0];
+
+      /* UPDATE */
+      if (editingDocumentId) {
+        await updateDoc(
+          doc(
+            db,
+            "documents",
+            editingDocumentId
+          ),
+          {
+            title:
+              documentTitle.trim(),
+
+            category:
+              documentCategory,
+
+            date:
+              finalDate,
+
+            url:
+              documentUrl.trim(),
+          }
+        );
+
+        alert(
+          "Document यशस्वीपणे Update झाले ✅"
+        );
+      }
+
+      /* ADD */
+      else {
+        await addDoc(
+          collection(
+            db,
+            "documents"
+          ),
+          {
+            title:
+              documentTitle.trim(),
+
+            category:
+              documentCategory,
+
+            date:
+              finalDate,
+
+            url:
+              documentUrl.trim(),
+
+            createdAt:
+              serverTimestamp(),
+          }
+        );
+
+        alert(
+          "Document यशस्वीपणे Save झाले ✅"
+        );
+      }
+
+      clearDocumentForm();
+    } catch (error: any) {
+      console.error(
+        "Document Save Error:",
+        error
+      );
+
+      alert(
+        "Document Save/Update झाले नाही. Firestore Rules तपासा."
+      );
+    } finally {
+      setDocumentLoading(false);
+    }
+  };
+
+  /* =====================================================
+     DOCUMENT - EDIT
+  ===================================================== */
+
+  const editDocument = (
+    item: DocumentItem
+  ) => {
+    setEditingDocumentId(
+      item.id
     );
-  }
 
-  // ------------------------------------
-  // Login Screen
-  // ------------------------------------
-  if (!logged) {
+    setDocumentTitle(
+      item.title
+    );
+
+    setDocumentCategory(
+      item.category
+    );
+
+    setDocumentDate(
+      item.date
+    );
+
+    setDocumentUrl(
+      item.url
+    );
+
+    window.scrollTo({
+      top: 850,
+      behavior: "smooth",
+    });
+  };
+
+  /* =====================================================
+     DOCUMENT - DELETE
+  ===================================================== */
+
+  const removeDocument = async (
+    id: string
+  ) => {
+    const confirmDelete =
+      confirm(
+        "हे Document delete करायचे आहे का?"
+      );
+
+    if (!confirmDelete) return;
+
+    try {
+      await deleteDoc(
+        doc(
+          db,
+          "documents",
+          id
+        )
+      );
+
+      if (
+        editingDocumentId === id
+      ) {
+        clearDocumentForm();
+      }
+
+      alert(
+        "Document delete झाले ✅"
+      );
+    } catch (error) {
+      console.error(error);
+
+      alert(
+        "Document Delete करताना error आला."
+      );
+    }
+  };
+
+  /* =====================================================
+     LOGOUT
+  ===================================================== */
+
+  const logout = async () => {
+    await signOut(auth);
+  };
+
+  /* =====================================================
+     LOGIN SCREEN
+  ===================================================== */
+
+  if (!user) {
     return (
       <main className="section">
+
         <div className="container admin-login">
 
           <span className="section-kicker">
             ADMIN PANEL
           </span>
 
-          <h1>Administrator Login</h1>
+          <h1>
+            Administrator Login
+          </h1>
 
           <p>
-            पंचायत समिती चामोर्शी Website Administration
+            पंचायत समिती चामोर्शी वेबसाइट
+            व्यवस्थापनासाठी Login करा.
           </p>
 
           <input
@@ -270,9 +645,10 @@ export default function Admin() {
             type="email"
             value={email}
             onChange={(e) =>
-              setEmail(e.target.value)
+              setEmail(
+                e.target.value
+              )
             }
-            autoComplete="email"
           />
 
           <input
@@ -280,11 +656,15 @@ export default function Admin() {
             type="password"
             value={password}
             onChange={(e) =>
-              setPassword(e.target.value)
+              setPassword(
+                e.target.value
+              )
             }
-            autoComplete="current-password"
             onKeyDown={(e) => {
-              if (e.key === "Enter") {
+              if (
+                e.key ===
+                "Enter"
+              ) {
                 login();
               }
             }}
@@ -296,31 +676,46 @@ export default function Admin() {
             disabled={loading}
           >
             {loading
-              ? "Logging in..."
+              ? "Login होत आहे..."
               : "Login"}
           </button>
 
         </div>
+
       </main>
     );
   }
 
-  // ------------------------------------
-  // Admin Dashboard
-  // ------------------------------------
+  /* =====================================================
+     ADMIN DASHBOARD
+  ===================================================== */
+
   return (
     <main className="section">
+
       <div className="container">
 
-        {/* Header */}
+        {/* =================================================
+            HEADER
+        ================================================= */}
+
         <div className="admin-head">
 
           <div>
+
             <span className="section-kicker">
               ADMIN DASHBOARD
             </span>
 
-            <h1>Website Management</h1>
+            <h1>
+              Website Management
+            </h1>
+
+            <p>
+              Logged in:{" "}
+              {user.email}
+            </p>
+
           </div>
 
           <button
@@ -332,42 +727,72 @@ export default function Admin() {
 
         </div>
 
-        {/* Dashboard Cards */}
+        {/* =================================================
+            DASHBOARD CARDS
+        ================================================= */}
+
         <div className="admin-cards">
 
           <div>
             📢
-            <b>{notices.length}</b>
-            <span>Notices</span>
+
+            <b>
+              {notices.length}
+            </b>
+
+            <span>
+              Notices
+            </span>
           </div>
 
           <div>
             📄
-            <b>0</b>
-            <span>Documents</span>
+
+            <b>
+              {documents.length}
+            </b>
+
+            <span>
+              Documents
+            </span>
           </div>
 
           <div>
             📷
-            <b>0</b>
-            <span>Gallery</span>
+
+            <b>
+              0
+            </b>
+
+            <span>
+              Gallery
+            </span>
           </div>
 
           <div>
             📰
-            <b>0</b>
-            <span>News</span>
+
+            <b>
+              0
+            </b>
+
+            <span>
+              News
+            </span>
           </div>
 
         </div>
 
-        {/* Notice Management */}
+        {/* =================================================
+            NOTICE MANAGEMENT
+        ================================================= */}
+
         <div className="content-box">
 
           <h2>
             {editingId
-              ? "Edit Notice"
-              : "Add Notice"}
+              ? "सूचना संपादित करा"
+              : "नवीन सूचना प्रकाशित करा"}
           </h2>
 
           <div className="form-grid">
@@ -376,23 +801,28 @@ export default function Admin() {
               placeholder="Notice title"
               value={title}
               onChange={(e) =>
-                setTitle(e.target.value)
+                setTitle(
+                  e.target.value
+                )
               }
             />
 
             <input
-              placeholder="Date"
               type="date"
               value={date}
               onChange={(e) =>
-                setDate(e.target.value)
+                setDate(
+                  e.target.value
+                )
               }
             />
 
             <select
               value={tag}
               onChange={(e) =>
-                setTag(e.target.value)
+                setTag(
+                  e.target.value
+                )
               }
             >
               <option>
@@ -410,6 +840,14 @@ export default function Admin() {
               <option>
                 निविदा
               </option>
+
+              <option>
+                आदेश
+              </option>
+
+              <option>
+                इतर
+              </option>
             </select>
 
             <button
@@ -421,92 +859,474 @@ export default function Admin() {
                 ? "Saving..."
                 : editingId
                 ? "Update Notice"
-                : "Add Notice"}
+                : "Notice Save करा"}
             </button>
 
             {editingId && (
               <button
                 className="outline-btn"
-                onClick={clearForm}
+                onClick={
+                  clearForm
+                }
                 disabled={loading}
               >
-                Cancel Edit
+                Cancel
               </button>
             )}
 
           </div>
 
-          {/* Notice List */}
+          {/* NOTICE LIST */}
+
           <div className="list-card">
 
-            {notices.length === 0 ? (
+            {notices.length ===
+            0 ? (
 
-              <div className="list-item">
-
-                <div>
-                  <b>
-                    अद्याप कोणतीही Notice नाही.
-                  </b>
-
-                  <small>
-                    वरील form मधून नवीन Notice add करा.
-                  </small>
-                </div>
-
-              </div>
+              <p>
+                सध्या कोणतीही
+                सूचना उपलब्ध नाही.
+              </p>
 
             ) : (
 
-              notices.map((n) => (
-
-                <div
-                  className="list-item"
-                  key={n.id}
-                >
-
-                  <div>
-
-                    <b>
-                      {n.title}
-                    </b>
-
-                    <small>
-                      {n.date} • {n.tag}
-                    </small>
-
-                  </div>
+              notices.map(
+                (n) => (
 
                   <div
-                    style={{
-                      display: "flex",
-                      gap: "8px",
-                      flexWrap: "wrap",
-                    }}
+                    className="list-item"
+                    key={n.id}
                   >
 
-                    <button
-                      className="outline-btn"
-                      onClick={() =>
-                        editNotice(n)
-                      }
-                    >
-                      ✏️ Edit
-                    </button>
+                    <div>
 
-                    <button
-                      className="delete-btn"
-                      onClick={() =>
-                        remove(n.id)
-                      }
+                      <b>
+                        {n.title}
+                      </b>
+
+                      <small>
+                        {n.date} •{" "}
+                        {n.tag}
+                      </small>
+
+                    </div>
+
+                    <div
+                      style={{
+                        display:
+                          "flex",
+                        gap:
+                          "8px",
+                        alignItems:
+                          "center",
+                        flexWrap:
+                          "wrap",
+                      }}
                     >
-                      🗑️ Delete
-                    </button>
+
+                      <button
+                        className="outline-btn"
+                        onClick={() =>
+                          editNotice(
+                            n
+                          )
+                        }
+                      >
+                        ✏️ Edit
+                      </button>
+
+                      <button
+                        className="delete-btn"
+                        onClick={() =>
+                          removeNotice(
+                            n.id
+                          )
+                        }
+                      >
+                        🗑️ Delete
+                      </button>
+
+                    </div>
 
                   </div>
 
-                </div>
+                )
+              )
 
-              ))
+            )}
+
+          </div>
+
+        </div>
+
+        {/* =================================================
+            DOCUMENT MANAGEMENT
+        ================================================= */}
+
+        <div
+          className="content-box"
+          style={{
+            marginTop:
+              "25px",
+          }}
+        >
+
+          <div
+            style={{
+              display:
+                "flex",
+              justifyContent:
+                "space-between",
+              alignItems:
+                "center",
+              gap:
+                "15px",
+              marginBottom:
+                "20px",
+              flexWrap:
+                "wrap",
+            }}
+          >
+
+            <div>
+
+              <span className="section-kicker">
+                DOCUMENT MANAGEMENT
+              </span>
+
+              <h2
+                style={{
+                  marginTop:
+                    "8px",
+                }}
+              >
+                📄 कागदपत्र व्यवस्थापन
+              </h2>
+
+              <p
+                style={{
+                  color:
+                    "#64748b",
+                  marginTop:
+                    "5px",
+                }}
+              >
+                Google Drive वर
+                अपलोड केलेल्या PDF
+                कागदपत्रांची Website
+                वर नोंद करा.
+              </p>
+
+            </div>
+
+            <div
+              style={{
+                minWidth:
+                  "110px",
+                padding:
+                  "12px 18px",
+                textAlign:
+                  "center",
+                border:
+                  "1px solid #dbeafe",
+                borderRadius:
+                  "12px",
+                background:
+                  "#eff6ff",
+              }}
+            >
+
+              <small
+                style={{
+                  display:
+                    "block",
+                  color:
+                    "#64748b",
+                }}
+              >
+                Documents
+              </small>
+
+              <strong
+                style={{
+                  fontSize:
+                    "28px",
+                }}
+              >
+                {documents.length}
+              </strong>
+
+            </div>
+
+          </div>
+
+          {/* DOCUMENT FORM */}
+
+          <div
+            className="form-grid"
+            style={{
+              marginBottom:
+                "20px",
+            }}
+          >
+
+            <input
+              placeholder="Document Title"
+              value={
+                documentTitle
+              }
+              onChange={(e) =>
+                setDocumentTitle(
+                  e.target.value
+                )
+              }
+            />
+
+            <select
+              value={
+                documentCategory
+              }
+              onChange={(e) =>
+                setDocumentCategory(
+                  e.target.value
+                )
+              }
+            >
+
+              <option>
+                सूचना
+              </option>
+
+              <option>
+                शासन निर्णय
+              </option>
+
+              <option>
+                परिपत्रक
+              </option>
+
+              <option>
+                आदेश
+              </option>
+
+              <option>
+                अहवाल
+              </option>
+
+              <option>
+                निविदा
+              </option>
+
+              <option>
+                बैठक
+              </option>
+
+              <option>
+                इतर
+              </option>
+
+            </select>
+
+            <input
+              type="date"
+              value={
+                documentDate
+              }
+              onChange={(e) =>
+                setDocumentDate(
+                  e.target.value
+                )
+              }
+            />
+
+            <input
+              type="url"
+              placeholder="Google Drive PDF Link"
+              value={
+                documentUrl
+              }
+              onChange={(e) =>
+                setDocumentUrl(
+                  e.target.value
+                )
+              }
+            />
+
+            <button
+              className="primary-btn"
+              onClick={
+                saveDocument
+              }
+              disabled={
+                documentLoading
+              }
+            >
+              {documentLoading
+                ? "Saving..."
+                : editingDocumentId
+                ? "Update Document"
+                : "Document Save करा"}
+            </button>
+
+            {editingDocumentId && (
+              <button
+                className="outline-btn"
+                onClick={
+                  clearDocumentForm
+                }
+                disabled={
+                  documentLoading
+                }
+              >
+                Cancel
+              </button>
+            )}
+
+          </div>
+
+          <p
+            style={{
+              fontSize:
+                "12px",
+              color:
+                "#64748b",
+              marginBottom:
+                "15px",
+            }}
+          >
+            ℹ️ Google Drive मध्ये
+            PDF ची Sharing
+            <b>
+              {" "}
+              Anyone with the
+              link → Viewer
+            </b>{" "}
+            अशी असणे आवश्यक आहे.
+          </p>
+
+          {/* DOCUMENT LIST */}
+
+          <div className="list-card">
+
+            {documents.length ===
+            0 ? (
+
+              <p>
+                सध्या कोणतेही
+                Document उपलब्ध
+                नाही.
+              </p>
+
+            ) : (
+
+              documents.map(
+                (item) => (
+
+                  <div
+                    className="list-item"
+                    key={item.id}
+                  >
+
+                    <div
+                      style={{
+                        minWidth:
+                          "0",
+                        flex:
+                          "1",
+                      }}
+                    >
+
+                      <b>
+                        📄{" "}
+                        {item.title}
+                      </b>
+
+                      <small>
+                        {item.date} •{" "}
+                        {item.category}
+                      </small>
+
+                      {item.url && (
+                        <small
+                          style={{
+                            display:
+                              "block",
+                            marginTop:
+                              "4px",
+                            maxWidth:
+                              "650px",
+                            overflow:
+                              "hidden",
+                            textOverflow:
+                              "ellipsis",
+                            whiteSpace:
+                              "nowrap",
+                          }}
+                        >
+                          {item.url}
+                        </small>
+                      )}
+
+                    </div>
+
+                    <div
+                      style={{
+                        display:
+                          "flex",
+                        gap:
+                          "8px",
+                        alignItems:
+                          "center",
+                        flexWrap:
+                          "wrap",
+                      }}
+                    >
+
+                      {item.url && (
+                        <a
+                          href={
+                            item.url
+                          }
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="outline-btn"
+                          style={{
+                            textDecoration:
+                              "none",
+                          }}
+                        >
+                          👁️ View PDF
+                        </a>
+                      )}
+
+                      <button
+                        className="outline-btn"
+                        onClick={() =>
+                          editDocument(
+                            item
+                          )
+                        }
+                      >
+                        ✏️ Edit
+                      </button>
+
+                      <button
+                        className="delete-btn"
+                        onClick={() =>
+                          removeDocument(
+                            item.id
+                          )
+                        }
+                      >
+                        🗑️ Delete
+                      </button>
+
+                    </div>
+
+                  </div>
+
+                )
+              )
 
             )}
 
@@ -515,6 +1335,7 @@ export default function Admin() {
         </div>
 
       </div>
+
     </main>
   );
 }

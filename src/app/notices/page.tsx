@@ -18,22 +18,16 @@ export default function Notices() {
   useEffect(() => {
     const q = query(
       collection(db, "notices"),
-      orderBy("createdAt", "desc")
+      orderBy("date", "desc")
     );
 
     const unsubscribe = onSnapshot(
       q,
       (snapshot) => {
-        const data: Notice[] = snapshot.docs.map((doc) => {
-          const item = doc.data();
-
-          return {
-            id: doc.id,
-            title: item.title || "",
-            date: item.date || "",
-            tag: item.tag || "महत्त्वपूर्ण",
-          };
-        });
+        const data: Notice[] = snapshot.docs.map((item) => ({
+          id: item.id,
+          ...(item.data() as Omit<Notice, "id">),
+        }));
 
         setNotices(data);
         setLoading(false);
@@ -50,42 +44,48 @@ export default function Notices() {
   return (
     <main className="section">
       <div className="container">
-        <span className="section-kicker">NOTICE BOARD</span>
+
+        <span className="section-kicker">
+          NOTICE BOARD
+        </span>
 
         <h1>महत्त्वपूर्ण सूचना</h1>
 
         {loading ? (
-          <div className="list-card">
-            <div className="list-item">
-              <div>
-                <b>सूचना लोड होत आहेत...</b>
-                <small>कृपया प्रतीक्षा करा.</small>
-              </div>
-            </div>
+          <div className="content-box">
+            <p>सूचना लोड होत आहेत...</p>
           </div>
         ) : notices.length === 0 ? (
-          <div className="list-card">
-            <div className="list-item">
-              <div>
-                <b>सध्या कोणतीही सूचना उपलब्ध नाही.</b>
-                <small>नवीन सूचना लवकरच प्रकाशित करण्यात येतील.</small>
-              </div>
-            </div>
+          <div className="content-box">
+            <p>सध्या कोणतीही सूचना उपलब्ध नाही.</p>
           </div>
         ) : (
           <div className="list-card">
+
             {notices.map((n) => (
-              <div className="list-item" key={n.id}>
-                <span className="date-pill">{n.date}</span>
+              <div
+                className="list-item"
+                key={n.id}
+              >
+
+                <span className="date-pill">
+                  {n.date}
+                </span>
 
                 <div>
                   <b>{n.title}</b>
-                  <small>{n.tag}</small>
+
+                  <small>
+                    {n.tag}
+                  </small>
                 </div>
+
               </div>
             ))}
+
           </div>
         )}
+
       </div>
     </main>
   );
