@@ -229,28 +229,16 @@ export default function Admin() {
         email.trim(),
         password
       );
-    } catch (error: any) {
-      console.error(error);
+        } catch (error: any) {
+      console.error("FIREBASE LOGIN ERROR:", error);
 
-      if (
-        error.code ===
-        "auth/invalid-credential"
-      ) {
-        alert(
-          "Email किंवा Password चुकीचा आहे."
-        );
-      } else if (
-        error.code ===
-        "auth/too-many-requests"
-      ) {
-        alert(
-          "खूप प्रयत्न झाले आहेत. थोड्या वेळाने पुन्हा प्रयत्न करा."
-        );
-      } else {
-        alert(
-          "Login failed. Firebase Authentication तपासा."
-        );
-      }
+      alert(
+        "Login Error\n\n" +
+        "Code: " +
+        (error?.code || "unknown") +
+        "\n\nMessage: " +
+        (error?.message || "Unknown Firebase error")
+      );
     } finally {
       setLoading(false);
     }
